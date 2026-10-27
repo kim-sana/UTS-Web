@@ -2,11 +2,11 @@
 require_once __DIR__ . '/connection.php';
 mysqli_select_db($conn, $dbName);
 
-// Filter: pencarian nama lengkap (+ kategori nilai huruf) via GET
+// Filter: pencarian nama lengkap + predikat via GET
 $keyword = trim($_GET['q'] ?? '');
-$hurufFilter = strtoupper(trim($_GET['huruf'] ?? ''));
-$hurufOptions = ['A', 'B', 'C', 'D', 'E'];
-// Sorting: nilai akhir trasc/desc
+$predikatFilter = trim($_GET['predikat'] ?? '');
+$predikatOptions = ['Sangat Bagus', 'Bagus', 'Cukup', 'Buruk', 'Sangat Buruk'];
+// Sorting: nilai akhir asc/desc
 $sort = strtolower(trim($_GET['sort'] ?? ''));
 if (!in_array($sort, ['asc', 'desc'], true)) {
   $sort = '';
@@ -20,10 +20,10 @@ if ($keyword !== '') {
   $types .= 's';
   $params[] = '%' . $keyword . '%';
 }
-if (in_array($hurufFilter, $hurufOptions, true)) {
-  $conditions[] = 'nilai_huruf = ?';
+if (in_array($predikatFilter, $predikatOptions, true)) {
+  $conditions[] = 'predikat = ?';
   $types .= 's';
-  $params[] = $hurufFilter;
+  $params[] = $predikatFilter;
 }
 
 $orderBy = $sort !== '' ? "nilai_akhir $sort, nim" : 'nim';
@@ -79,13 +79,13 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-$hasFilter = $keyword !== '' || in_array($hurufFilter, $hurufOptions, true);
+$hasFilter = $keyword !== '' || in_array($predikatFilter, $predikatOptions, true);
 $filterSummary = [];
 if ($keyword !== '') {
   $filterSummary[] = 'Nama: "' . $keyword . '"';
 }
-if (in_array($hurufFilter, $hurufOptions, true)) {
-  $filterSummary[] = 'Nilai huruf: ' . $hurufFilter;
+if (in_array($predikatFilter, $predikatOptions, true)) {
+  $filterSummary[] = 'Predikat: ' . $predikatFilter;
 }
 if ($sort !== '') {
   $filterSummary[] = 'Urut nilai akhir: ' . ($sort === 'asc' ? 'kecil ke besar' : 'besar ke kecil');
@@ -96,11 +96,12 @@ $filterSummary = implode(' · ', $filterSummary);
 $sortToggle = $sort === 'asc' ? 'desc' : 'asc';
 $sortParams = [];
 $sortParams['sort'] = $sortToggle;
+$sortParams['per_page'] = $perPage;
 if ($keyword !== '') {
   $sortParams['q'] = $keyword;
 }
-if (in_array($hurufFilter, $hurufOptions, true)) {
-  $sortParams['huruf'] = $hurufFilter;
+if (in_array($predikatFilter, $predikatOptions, true)) {
+  $sortParams['predikat'] = $predikatFilter;
 }
 $sortUrl = 'index.php?' . http_build_query($sortParams);
 
@@ -115,8 +116,8 @@ $pageBaseParams = [];
 if ($keyword !== '') {
   $pageBaseParams['q'] = $keyword; // Atur ulang filter: semua kembali default
 }
-if (in_array($hurufFilter, $hurufOptions, true)) {
-  $pageBaseParams['huruf'] = $hurufFilter;
+if (in_array($predikatFilter, $predikatOptions, true)) {
+  $pageBaseParams['predikat'] = $predikatFilter;
 }
 if ($sort !== '') {
   $pageBaseParams['sort'] = $sort;
@@ -241,8 +242,11 @@ $avatarPlaceholder = 'data:image/svg+xml;charset=utf-8,' . rawurlencode(
                     </div>
                     <div class="col-12 col-md-8">
                       <div class="d-flex flex-wrap justify-content-md-end gap-2">
-                        <!-- Filter: cari nama lengkap + kategori nilai huruf -->
+                        <!-- Filter: cari nama lengkap + predikat -->
                         <form method="get" action="index.php" class="d-flex flex-wrap gap-2 align-items-center">
+<?php if ($sort !== ''): ?>
+                          <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>" />
+<?php endif; ?>
                           <div class="input-group input-group-sm w-auto">
                             <span class="input-group-text">
                               <i class="bi bi-search" aria-hidden="true"></i>
@@ -257,10 +261,10 @@ $avatarPlaceholder = 'data:image/svg+xml;charset=utf-8,' . rawurlencode(
                               style="width: 180px"
                             />
                           </div>
-                          <select name="huruf" class="form-select form-select-sm w-auto" aria-label="Kategori nilai huruf">
-                            <option value="">Semua nilai huruf</option>
-<?php foreach ($hurufOptions as $opt): ?>
-                            <option value="<?= $opt ?>" <?= $hurufFilter === $opt ? 'selected' : '' ?>><?= $opt ?></option>
+                          <select name="predikat" class="form-select form-select-sm w-auto" aria-label="Filter predikat">
+                            <option value="">Semua predikat</option>
+<?php foreach ($predikatOptions as $opt): ?>
+                            <option value="<?= htmlspecialchars($opt) ?>" <?= $predikatFilter === $opt ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
 <?php endforeach; ?>
                           </select>
                           <select name="per_page" class="form-select form-select-sm w-auto" aria-label="Data per halaman" onchange="this.form.submit()">
@@ -376,10 +380,13 @@ $avatarPlaceholder = 'data:image/svg+xml;charset=utf-8,' . rawurlencode(
                     &middot; <?= htmlspecialchars($filterSummary) ?> ( <a href="index.php?per_page=<?= $perPage ?>">reset</a> )
 <?php endif; ?>
                   </div>
-<?php if ($totalPages > 1): ?>
+<?php if ($totalRows > 0): ?>
                   <ul class="pagination pagination-sm m-0 float-end">
                     <li class="page-item <?= $pageNum <= 1 ? 'disabled' : '' ?>">
-                      <a class="page-link" href="<?= $pageNum <= 1 ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => $pageNum - 1]) ?>" aria-label="Sebelumnya">&laquo;</a>
+                      <a class="page-link" href="<?= $pageNum <= 1 ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => 1]) ?>" aria-label="First Page" title="First Page">First</a>
+                    </li>
+                    <li class="page-item <?= $pageNum <= 1 ? 'disabled' : '' ?>">
+                      <a class="page-link" href="<?= $pageNum <= 1 ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => $pageNum - 1]) ?>" aria-label="Previous Page" title="Previous Page">Previous</a>
                     </li>
 <?php $prevPage = 0; foreach ($pagesList as $p): if ($p - $prevPage > 1): ?>
                     <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
@@ -389,7 +396,10 @@ $avatarPlaceholder = 'data:image/svg+xml;charset=utf-8,' . rawurlencode(
                     </li>
 <?php $prevPage = $p; endforeach; ?>
                     <li class="page-item <?= $pageNum >= $totalPages ? 'disabled' : '' ?>">
-                      <a class="page-link" href="<?= $pageNum >= $totalPages ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => $pageNum + 1]) ?>" aria-label="Selanjutnya">&raquo;</a>
+                      <a class="page-link" href="<?= $pageNum >= $totalPages ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => $pageNum + 1]) ?>" aria-label="Next Page" title="Next Page">Next</a>
+                    </li>
+                    <li class="page-item <?= $pageNum >= $totalPages ? 'disabled' : '' ?>">
+                      <a class="page-link" href="<?= $pageNum >= $totalPages ? '#' : pageUrl($pageBaseParams, ['per_page' => $perPage, 'page' => $totalPages]) ?>" aria-label="Last Page" title="Last Page">Last</a>
                     </li>
                   </ul>
 <?php endif; ?>
@@ -543,7 +553,7 @@ $avatarPlaceholder = 'data:image/svg+xml;charset=utf-8,' . rawurlencode(
       bootstrap.Modal.getOrCreateInstance(document.getElementById('modal-edit-nilai')).show();
 
       // Hapus param ?edit= dari URL saat modal ditutup (X, Cancel, atau klik backdrop),
-      // supaya refresh tidak mem-buka modal lagi. Parameter lain (q, huruf, sort,
+      // supaya refresh tidak mem-buka modal lagi. Parameter lain (q, predikat, sort,
       // per_page, page) dipertahankan.
       document.getElementById('modal-edit-nilai').addEventListener('hidden.bs.modal', function () {
         const url = new URL(window.location.href);
